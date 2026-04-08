@@ -57,6 +57,7 @@ async function initTables(p) {
       phone       VARCHAR(50)  NOT NULL UNIQUE,
       telegram    VARCHAR(255) DEFAULT '',
       avatar      TEXT,
+      is_blocked  BOOLEAN      NOT NULL DEFAULT FALSE,
       balance     NUMERIC      NOT NULL DEFAULT 0,
       joined      TIMESTAMPTZ  DEFAULT NOW(),
       created_at  TIMESTAMPTZ  DEFAULT NOW(),
@@ -71,6 +72,17 @@ async function initTables(p) {
         WHERE table_name = 'users' AND column_name = 'balance'
       ) THEN
         ALTER TABLE users ADD COLUMN balance NUMERIC NOT NULL DEFAULT 0;
+      END IF;
+    END $$;
+
+    -- Mavjud jadvalga is_blocked ustunini qo'shish (agar yo'q bo'lsa)
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'users' AND column_name = 'is_blocked'
+      ) THEN
+        ALTER TABLE users ADD COLUMN is_blocked BOOLEAN NOT NULL DEFAULT FALSE;
       END IF;
     END $$;
 

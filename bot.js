@@ -5,8 +5,9 @@ const { createToken } = require('./tgTokens');
 const MINI_APP_URL = process.env.MINI_APP_URL || 'https://frontend-353d.vercel.app/';
 
 let bot = null;
+let pollingStarted = false;
 
-function getBot() {
+function getBot(startPolling = false) {
   if (!bot && process.env.TELEGRAM_BOT_TOKEN) {
     bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
 
@@ -102,16 +103,27 @@ function getBot() {
       }
     });
 
-    bot.launch()
-      .then(() => console.log('🤖 Telegram bot ishga tushdi'))
-      .catch(err => console.error('❌ Bot launch xatosi:', err.message));
+  }
+
+  if (bot && startPolling && !pollingStarted) {
+    pollingStarted = true;
+    bot.launch({ dropPendingUpdates: true })
+      .then(() => console.log('🤖 Telegram bot polling ishga tushdi'))
+      .catch(err => {
+        const msg = String(err?.message || "");
+        if (msg.includes("409")) {
+          console.warn("⚠️ Bot 409: boshqa instance polling qilmoqda, bu instance polling'siz davom etadi");
+          return;
+        }
+        console.error('❌ Bot launch xatosi:', msg);
+      });
   }
   return bot;
 }
 
 // Foydalanuvchiga Telegram orqali xabar yuborish
 async function notifyUser(tgChatId, text, extra = {}) {
-  const b = getBot();
+  const b = getBot(false);
   if (!b || !tgChatId) return;
   try {
     await b.telegram.sendMessage(tgChatId, text, extra);

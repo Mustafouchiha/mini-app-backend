@@ -79,6 +79,10 @@ router.get("/my", authMiddleware, async (req, res) => {
 // POST /api/products — yangi mahsulot qo'shish
 router.post("/", authMiddleware, async (req, res) => {
   try {
+    if (req.user.is_blocked) {
+      return res.status(403).json({ message: "Siz bloklangansiz. Yangi post qo'ya olmaysiz" });
+    }
+
     const { name, category, price, unit, qty, condition, viloyat, tuman, photo, photos } = req.body;
 
     if (!name || !price || !qty || !viloyat) {

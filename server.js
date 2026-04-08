@@ -7,8 +7,14 @@ async function start() {
   await connect();
 
   const { getBot } = require('./bot');
-  if (process.env.TELEGRAM_BOT_TOKEN) {
-    getBot();
+  const botTokenSet = !!process.env.TELEGRAM_BOT_TOKEN;
+  const pollingEnabled = process.env.BOT_POLLING_ENABLED === "true";
+  if (botTokenSet && pollingEnabled) {
+    getBot(true);
+  } else if (botTokenSet && !pollingEnabled) {
+    // sendMessage ishlashi uchun bot instance yaratiladi, lekin polling yoqilmaydi
+    getBot(false);
+    console.log('ℹ️ BOT_POLLING_ENABLED=false — bot polling yoqilmadi (xabar yuborish ishlaydi)');
   } else {
     console.log('⚠️  TELEGRAM_BOT_TOKEN topilmadi — bot ishga tushmadi');
   }

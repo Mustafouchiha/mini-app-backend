@@ -18,11 +18,11 @@ router.get("/users", async (req, res) => {
     if (!q) {
       // So'nggi 50 ta foydalanuvchi
       ({ rows } = await query(
-        "SELECT id, public_id, name, phone, telegram, balance, tg_chat_id, joined FROM users ORDER BY joined DESC LIMIT 50"
+        "SELECT id, public_id, name, phone, telegram, is_blocked, balance, tg_chat_id, joined FROM users ORDER BY joined DESC LIMIT 50"
       ));
     } else {
       ({ rows } = await query(
-        `SELECT id, public_id, name, phone, telegram, balance, tg_chat_id, joined FROM users
+        `SELECT id, public_id, name, phone, telegram, is_blocked, balance, tg_chat_id, joined FROM users
          WHERE phone ILIKE $1 OR name ILIKE $1 OR id::text ILIKE $1 OR public_id ILIKE $1
          ORDER BY joined DESC LIMIT 30`,
         [`%${q}%`]
@@ -153,6 +153,32 @@ router.delete("/users/:id", async (req, res) => {
   }
 });
 
+// ── Foydalanuvchini bloklash/ochish ───────────────────────────────
+// PUT /api/operator/users/:id/block { blocked: true|false }
+router.put("/users/:id/block", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const blocked = Boolean(req.body.blocked);
+    if (id === req.user.id && blocked) {
+      return res.status(400).json({ message: "O'zingizni bloklay olmaysiz" });
+    }
+    const { rows } = await query(
+      `UPDATE users
+       SET is_blocked = $1, updated_at = NOW()
+       WHERE id = $2
+       RETURNING id, public_id, name, phone, is_blocked`,
+      [blocked, id]
+    );
+    if (!rows[0]) return res.status(404).json({ message: "Foydalanuvchi topilmadi" });
+    res.json({
+      message: blocked ? "Foydalanuvchi bloklandi" : "Foydalanuvchi blokdan chiqarildi",
+      user: rows[0],
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // ── Mahsulotlarni qidirish ────────────────────────────────────────
 // GET /api/operator/products?q=
 router.get("/products", async (req, res) => {
@@ -163,18 +189,18 @@ router.get("/products", async (req, res) => {
     if (!q) {
       ({ rows } = await query(
         `SELECT p.id, p.public_id, p.name, p.price, p.unit, p.qty, p.category, p.viloyat,
+                p.is_active,
                 u.name AS owner_name, u.phone AS owner_phone, u.public_id AS owner_public_id, p.created_at
          FROM products p JOIN users u ON p.owner_id = u.id
-         WHERE p.is_active = true
          ORDER BY p.created_at DESC LIMIT 50`
       ));
     } else {
       ({ rows } = await query(
         `SELECT p.id, p.public_id, p.name, p.price, p.unit, p.qty, p.category, p.viloyat,
+                p.is_active,
                 u.name AS owner_name, u.phone AS owner_phone, u.public_id AS owner_public_id, p.created_at
          FROM products p JOIN users u ON p.owner_id = u.id
-         WHERE p.is_active = true
-           AND (
+         WHERE (
              p.name ILIKE $1 OR p.id::text ILIKE $1 OR p.public_id ILIKE $1
              OR u.phone ILIKE $1 OR u.name ILIKE $1 OR u.public_id ILIKE $1
            )
@@ -195,6 +221,28 @@ router.delete("/products/:id", async (req, res) => {
   try {
     await query("UPDATE products SET is_active = false WHERE id = $1", [req.params.id]);
     res.json({ message: "Mahsulot o'chirildi" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ── Mahsulotni ochish/yopish ─────────────────────────────────────
+// PUT /api/operator/products/:id/toggle { is_active: true|false }
+router.put("/products/:id/toggle", async (req, res) => {
+  try {
+    const active = Boolean(req.body.is_active);
+    const { rows } = await query(
+      `UPDATE products
+       SET is_active = $1, updated_at = NOW()
+       WHERE id = $2
+       RETURNING id, public_id, name, is_active`,
+      [active, req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ message: "Mahsulot topilmadi" });
+    res.json({
+      message: active ? "Mahsulot ochildi" : "Mahsulot yopildi",
+      product: rows[0],
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
