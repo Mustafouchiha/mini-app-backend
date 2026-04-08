@@ -10,7 +10,7 @@ function paymentEnabled() {
   return false;
 }
 
-const DEFAULT_CARD = "8600 0000 0000 0000";
+const DEFAULT_CARD = "9860160619731286";
 const DEFAULT_NAME = "Mustafo Ismoiljonov";
 
 function getOperatorCard() {
