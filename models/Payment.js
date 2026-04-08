@@ -19,12 +19,16 @@ const Payment = {
     return rows[0];
   },
 
-  async updatePending(offer_id, { card_from, note }) {
+  async updatePending(offer_id, { card_from, note, amount }) {
     const { rows } = await query(
       `UPDATE payments
-       SET card_from=$1, note=$2, status='pending', updated_at=NOW()
-       WHERE offer_id=$3 RETURNING *`,
-      [card_from || null, note || null, offer_id]
+       SET card_from=$1,
+           note=$2,
+           amount=$3,
+           status='pending',
+           updated_at=NOW()
+       WHERE offer_id=$4 RETURNING *`,
+      [card_from || null, note || null, amount, offer_id]
     );
     return rows[0] || null;
   },

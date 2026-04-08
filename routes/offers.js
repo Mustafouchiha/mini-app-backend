@@ -48,7 +48,7 @@ router.post("/", authMiddleware, async (req, res) => {
       await notifyUser(
         seller.tg_chat_id,
         `📦 Yangi taklif keldi!\n\n` +
-        `👤 Xaridor: ${req.user.name} (${req.user.phone})\n` +
+        `👤 Xaridor: ${req.user.public_id || req.user.id}\n` +
         `🧱 Mahsulot: ${product.name}\n` +
         `💰 Narx: ${Number(product.price).toLocaleString()} so'm\n` +
         (message ? `💬 Xabar: ${message}\n` : '') +
@@ -67,13 +67,12 @@ router.post("/", authMiddleware, async (req, res) => {
     res.status(201).json({
       id:           offer.id,
       productId:    product.id,
+      productPublicId: product.public_id,
       productName:  product.name,
       productPrice: Number(product.price),
       productUnit:  product.unit,
       buyerId:      req.user.id,
-      buyerName:    req.user.name,
-      buyerPhone:   req.user.phone,
-      buyerTelegram: req.user.telegram,
+      buyerPublicId: req.user.public_id,
       sellerId:     product.owner_id,
       status:       offer.status,
       sentAt:       offer.created_at,
@@ -91,13 +90,12 @@ router.get("/", authMiddleware, async (req, res) => {
     const formatted = offers.map((o) => ({
       id:           o.id,
       productId:    o.product_id,
+      productPublicId: o.product_public_id,
       productName:  o.product_name,
       productPrice: Number(o.product_price),
       productUnit:  o.product_unit,
       buyerId:      o.buyer_id,
-      buyerName:    o.buyer_name,
-      buyerPhone:   o.buyer_phone,
-      buyerTelegram: o.buyer_telegram,
+      buyerPublicId: o.buyer_public_id,
       ownerId:      o.seller_id,
       status:       o.status,
       sentAt:       o.created_at,
@@ -117,11 +115,15 @@ router.get("/sent", authMiddleware, async (req, res) => {
     const formatted = offers.map((o) => ({
       id:           o.id,
       productId:    o.product_id,
+      productPublicId: o.product_public_id,
       productName:  o.product_name,
       productPrice: Number(o.product_price),
       productUnit:  o.product_unit,
       sellerId:     o.seller_id,
-      sellerName:   o.seller_name,
+      sellerPublicId: o.seller_public_id,
+      sellerName:   o.status === "paid" ? o.seller_name : undefined,
+      sellerPhone:  o.status === "paid" ? o.seller_phone : undefined,
+      sellerTelegram: o.status === "paid" ? o.seller_telegram : undefined,
       status:       o.status,
       sentAt:       o.created_at,
     }));
@@ -135,11 +137,25 @@ router.get("/sent", authMiddleware, async (req, res) => {
 // PUT /api/offers/:id/paid — to'lov tasdiqlash (seller)
 router.put("/:id/paid", authMiddleware, async (req, res) => {
   try {
-    const offer = await Offer.updateStatus(req.params.id, req.user.id, "paid");
-    if (!offer) {
+    const updated = await Offer.updateStatus(req.params.id, req.user.id, "paid");
+    if (!updated) {
       return res.status(404).json({ message: "Taklif topilmadi yoki ruxsat yo'q" });
     }
-    res.json({ message: "To'lov tasdiqlandi", id: offer.id });
+
+    // Bot avtomatik sotuvchi kontaktingizni buyer’ga yuboradi
+    const offerForMsg = await Offer.findById(updated.id);
+    if (offerForMsg?.buyer_tg_chat_id && offerForMsg?.seller_phone && offerForMsg?.seller_telegram) {
+      await notifyUser(
+        offerForMsg.buyer_tg_chat_id,
+        `✅ To'lov tasdiqlandi!\n\nSotuvchi kontaktingiz:\n` +
+        `📞 Telefon: +998 ${offerForMsg.seller_phone}\n` +
+        `✈️ Telegram: ${offerForMsg.seller_telegram}\n` +
+        `👤 Ism: ${offerForMsg.seller_name}\n`,
+        { parse_mode: "Markdown" }
+      );
+    }
+
+    res.json({ message: "To'lov tasdiqlandi", id: updated.id });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

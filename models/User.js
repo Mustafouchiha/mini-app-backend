@@ -1,6 +1,17 @@
 const { query } = require("../db");
+const crypto = require("crypto");
 
 const User = {
+  async _generatePublicId() {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const n = crypto.randomInt(0, 100000000); // 0..99999999
+      const pid = "US" + String(n).padStart(8, "0");
+      const { rows } = await query("SELECT 1 FROM users WHERE public_id=$1 LIMIT 1", [pid]);
+      if (rows.length === 0) return pid;
+    }
+    throw new Error("public_id generatsiya qilishda xatolik");
+  },
+
   async findOne({ phone }) {
     const { rows } = await query(
       "SELECT * FROM users WHERE phone = $1 LIMIT 1",
@@ -26,11 +37,12 @@ const User = {
   },
 
   async create({ name, phone, telegram = "" }) {
+    const public_id = await this._generatePublicId();
     const { rows } = await query(
-      `INSERT INTO users (name, phone, telegram)
-       VALUES ($1, $2, $3)
+      `INSERT INTO users (public_id, name, phone, telegram)
+       VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [name, phone, telegram]
+      [public_id, name, phone, telegram]
     );
     return rows[0];
   },

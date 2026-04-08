@@ -23,6 +23,7 @@ router.get("/", optionalAuth, async (req, res) => {
 
     const formatted = products.map((p) => ({
       id:           p.id,
+      publicId:    p.public_id,
       name:         p.name,
       category:     p.category,
       price:        Number(p.price),
@@ -34,9 +35,10 @@ router.get("/", optionalAuth, async (req, res) => {
       photo:        p.photo,
       photos:       p.photos ? JSON.parse(p.photos) : (p.photo ? [p.photo] : []),
       ownerId:      p.owner_id,
-      ownerName:    p.owner_name,
-      ownerPhone:   loggedIn ? p.owner_phone : null,
-      ownerTelegram: loggedIn ? p.owner_telegram : null,
+      // Shaxsiy kontaktlar faqat to'lovdan keyin ochiladi (API javobida bermaymiz).
+      ownerName:    null,
+      ownerPhone:   null,
+      ownerTelegram: null,
       createdAt:    p.created_at,
     }));
 
@@ -53,6 +55,7 @@ router.get("/my", authMiddleware, async (req, res) => {
 
     const formatted = products.map((p) => ({
       id:        p.id,
+      publicId: p.public_id,
       name:      p.name,
       category:  p.category,
       price:     Number(p.price),
@@ -104,6 +107,7 @@ router.post("/", authMiddleware, async (req, res) => {
 
     res.status(201).json({
       id:        product.id,
+      publicId: product.public_id,
       name:      product.name,
       category:  product.category,
       price:     Number(product.price),

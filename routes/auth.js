@@ -10,8 +10,15 @@ const JWT_SECRET = process.env.JWT_SECRET || 'remarket_secret_key_2024';
 const makeToken = (id) =>
   jwt.sign({ id }, JWT_SECRET, { expiresIn: "30d" });
 
+const normalizeTelegram = (tg) => {
+  const t = (tg || "").trim();
+  if (!t) return "";
+  return t.startsWith("@") ? t : `@${t}`;
+};
+
 const formatUser = (u) => ({
   id:       u.id,
+  publicId: u.public_id,
   name:     u.name,
   phone:    u.phone,
   telegram: u.telegram,
@@ -55,11 +62,21 @@ router.post("/send-code", async (req, res) => {
 router.post("/register", async (req, res) => {
   try {
     const { name, phone, telegram, tgChatId } = req.body;
-    if (!name || !phone)
+    if (!name || !phone) {
       return res.status(400).json({ message: "Ism va telefon majburiy" });
+    }
+    const tg = normalizeTelegram(telegram);
+    if (!tg) {
+      return res.status(400).json({ message: "Telegram username majburiy" });
+    }
 
     const exists = await User.findOne({ phone });
-    let user = exists || (await User.create({ name, phone, telegram: telegram || "" }));
+    let user = exists || (await User.create({ name, phone, telegram: tg }));
+
+    // Agar foydalanuvchi mavjud bo'lsa, telegram bo'sh bo'lsa yangilaymiz
+    if (user && (!user.telegram || !String(user.telegram).trim())) {
+      user = await User.findByIdAndUpdate(user.id, { telegram: tg }) || user;
+    }
 
     if (tgChatId && String(user.tg_chat_id) !== String(tgChatId)) {
       user = await User.findByIdAndUpdate(user.id, { tg_chat_id: tgChatId }) || user;

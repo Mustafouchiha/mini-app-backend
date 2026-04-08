@@ -11,12 +11,12 @@ function paymentEnabled() {
 }
 
 const DEFAULT_CARD = "8600 0000 0000 0000";
-const DEFAULT_NAME = "ReMarket Operator";
+const DEFAULT_NAME = "Mustafo Ismoiljonov";
 
 function getOperatorCard() {
   const card = process.env.OPERATOR_CARD;
   const name = process.env.OPERATOR_NAME;
-  const telegram = process.env.OPERATOR_TELEGRAM || "@remarket_operator";
+  const telegram = process.env.OPERATOR_TELEGRAM || "@Requrilish_admin";
 
   const isDefaultCard = !card || card === DEFAULT_CARD;
 
@@ -64,22 +64,28 @@ router.post("/", authMiddleware, async (req, res) => {
     const offer = await Offer.findById(offerId);
     if (!offer)
       return res.status(404).json({ message: "Taklif topilmadi" });
-    if (offer.buyer_id !== req.user.id)
-      return res.status(403).json({ message: "Bu taklif sizniki emas" });
+    // 5% to'lovni endi mahsulot egasi (seller) amalga oshiradi
+    if (offer.seller_id !== req.user.id)
+      return res.status(403).json({ message: "Faqat mahsulot egasi to'lov yubora oladi" });
     if (offer.status === "paid")
       return res.status(400).json({ message: "Bu taklif allaqachon to'langan" });
+
+    // Xaridor 5% xizmat haqini platformaga to'laydi.
+    // (offer.product_price — mahsulot narxi; 5% ni to'laymiz)
+    const fee = Math.round(Number(offer.product_price) * 0.05);
+    if (!fee || fee <= 0) return res.status(400).json({ message: "Xizmat haqi hisoblab bo'lmadi" });
 
     let payment = await Payment.findByOfferId(offerId);
 
     if (payment) {
-      payment = await Payment.updatePending(offerId, { card_from: cardFrom, note });
+      payment = await Payment.updatePending(offerId, { card_from: cardFrom, note, amount: fee });
     } else {
       payment = await Payment.create({
         offer_id:   offer.id,
         buyer_id:   offer.buyer_id,
         seller_id:  offer.seller_id,
         product_id: offer.product_id,
-        amount:     offer.product_price,
+        amount:     fee,
         card_from:  cardFrom || null,
         card_to:    op.card.replace(/\s/g, ""),
         note:       note || null,
@@ -113,10 +119,24 @@ router.put("/:offerId/confirm", authMiddleware, async (req, res) => {
     if (!payment)
       return res.status(404).json({ message: "To'lov yozuvi topilmadi" });
 
-    // Offer statusini yangilash
-    await Offer.updateStatus(req.params.offerId, req.user.id, "paid");
+    // Offer statusini yangilash (status oldin 'paid' bo'lmasa)
+    const updatedOffer = await Offer.updateStatus(req.params.offerId, req.user.id, "paid");
 
     console.log(`✅ To'lov tasdiqlandi: offer=${req.params.offerId}`);
+
+    if (updatedOffer) {
+      const offerForMsg = await Offer.findById(req.params.offerId);
+      if (offerForMsg?.buyer_tg_chat_id && offerForMsg?.seller_phone && offerForMsg?.seller_telegram) {
+        await notifyUser(
+          offerForMsg.buyer_tg_chat_id,
+          `✅ To'lov tasdiqlandi!\n\nSotuvchi kontaktingiz:\n` +
+          `📞 Telefon: +998 ${offerForMsg.seller_phone}\n` +
+          `✈️ Telegram: ${offerForMsg.seller_telegram}\n` +
+          `👤 Ism: ${offerForMsg.seller_name}\n`,
+          { parse_mode: "Markdown" }
+        );
+      }
+    }
 
     res.json({ message: "To'lov tasdiqlandi ✅", payment: formatPayment(payment) });
   } catch (err) {

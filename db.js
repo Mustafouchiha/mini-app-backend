@@ -52,6 +52,7 @@ async function initTables(p) {
 
     CREATE TABLE IF NOT EXISTS users (
       id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      public_id  VARCHAR(10),
       name        VARCHAR(255) NOT NULL,
       phone       VARCHAR(50)  NOT NULL UNIQUE,
       telegram    VARCHAR(255) DEFAULT '',
@@ -73,6 +74,17 @@ async function initTables(p) {
       END IF;
     END $$;
 
+    -- Mavjud jadvalga public_id ustunini qo'shish (agar yo'q bo'lsa)
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'users' AND column_name = 'public_id'
+      ) THEN
+        ALTER TABLE users ADD COLUMN public_id VARCHAR(10);
+      END IF;
+    END $$;
+
     -- Mavjud jadvalga tg_chat_id ustunini qo'shish (agar yo'q bo'lsa)
     DO $$
     BEGIN
@@ -86,6 +98,7 @@ async function initTables(p) {
 
     CREATE TABLE IF NOT EXISTS products (
       id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      public_id  VARCHAR(10),
       name        VARCHAR(255) NOT NULL,
       category    VARCHAR(50)  NOT NULL DEFAULT 'boshqa',
       price       NUMERIC      NOT NULL,
@@ -100,6 +113,52 @@ async function initTables(p) {
       created_at  TIMESTAMPTZ  DEFAULT NOW(),
       updated_at  TIMESTAMPTZ  DEFAULT NOW()
     );
+
+    -- products uchun public_id ustunini qo'shish (agar kerak bo'lsa)
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'products' AND column_name = 'public_id'
+      ) THEN
+        ALTER TABLE products ADD COLUMN public_id VARCHAR(10);
+      END IF;
+    END $$;
+
+    CREATE UNIQUE INDEX IF NOT EXISTS users_public_id_unique
+      ON users(public_id)
+      WHERE public_id IS NOT NULL;
+
+    CREATE UNIQUE INDEX IF NOT EXISTS products_public_id_unique
+      ON products(public_id)
+      WHERE public_id IS NOT NULL;
+
+    -- Eski yozuvlar uchun public_id'ni backfill qilish
+    DO $$
+    DECLARE r RECORD;
+      sid TEXT;
+    BEGIN
+      FOR r IN SELECT id FROM users WHERE public_id IS NULL LOOP
+        LOOP
+          sid := 'US' || lpad(floor(random() * 100000000)::text, 8, '0');
+          EXIT WHEN NOT EXISTS (SELECT 1 FROM users WHERE public_id = sid);
+        END LOOP;
+        UPDATE users SET public_id = sid WHERE id = r.id;
+      END LOOP;
+    END $$;
+
+    DO $$
+    DECLARE r RECORD;
+      sid TEXT;
+    BEGIN
+      FOR r IN SELECT id FROM products WHERE public_id IS NULL LOOP
+        LOOP
+          sid := 'PO' || lpad(floor(random() * 100000000)::text, 8, '0');
+          EXIT WHEN NOT EXISTS (SELECT 1 FROM products WHERE public_id = sid);
+        END LOOP;
+        UPDATE products SET public_id = sid WHERE id = r.id;
+      END LOOP;
+    END $$;
 
     CREATE TABLE IF NOT EXISTS offers (
       id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

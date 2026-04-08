@@ -14,8 +14,8 @@ const Offer = {
     const { rows } = await query(
       `SELECT o.*,
               p.name AS product_name, p.price AS product_price, p.unit AS product_unit,
-              b.name AS buyer_name, b.phone AS buyer_phone, b.telegram AS buyer_telegram,
-              s.name AS seller_name, s.phone AS seller_phone
+               b.tg_chat_id AS buyer_tg_chat_id,
+              s.name AS seller_name, s.phone AS seller_phone, s.telegram AS seller_telegram
        FROM offers o
        JOIN products p ON p.id = o.product_id
        JOIN users b ON b.id = o.buyer_id
@@ -38,8 +38,9 @@ const Offer = {
   async findBySeller(seller_id) {
     const { rows } = await query(
       `SELECT o.*,
-              p.name AS product_name, p.price AS product_price, p.unit AS product_unit, p.photo AS product_photo,
-              b.name AS buyer_name, b.phone AS buyer_phone, b.telegram AS buyer_telegram
+              p.name AS product_name, p.public_id AS product_public_id,
+              p.price AS product_price, p.unit AS product_unit, p.photo AS product_photo,
+              b.public_id AS buyer_public_id
        FROM offers o
        JOIN products p ON p.id = o.product_id
        JOIN users b ON b.id = o.buyer_id
@@ -54,8 +55,10 @@ const Offer = {
   async findByBuyer(buyer_id) {
     const { rows } = await query(
       `SELECT o.*,
-              p.name AS product_name, p.price AS product_price, p.unit AS product_unit, p.photo AS product_photo,
-              s.name AS seller_name, s.phone AS seller_phone
+              p.name AS product_name, p.public_id AS product_public_id,
+              p.price AS product_price, p.unit AS product_unit, p.photo AS product_photo,
+              s.name AS seller_name, s.phone AS seller_phone, s.telegram AS seller_telegram,
+              s.public_id AS seller_public_id
        FROM offers o
        JOIN products p ON p.id = o.product_id
        JOIN users s ON s.id = o.seller_id
@@ -69,7 +72,7 @@ const Offer = {
   async updateStatus(id, seller_id, status) {
     const { rows } = await query(
       `UPDATE offers SET status=$1, updated_at=NOW()
-       WHERE id=$2 AND seller_id=$3 RETURNING *`,
+       WHERE id=$2 AND seller_id=$3 AND status != $1 RETURNING *`,
       [status, id, seller_id]
     );
     return rows[0] || null;

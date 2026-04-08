@@ -1,6 +1,17 @@
 const { query } = require("../db");
+const crypto = require("crypto");
 
 const Product = {
+  async _generatePublicId() {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const n = crypto.randomInt(0, 100000000); // 0..99999999
+      const pid = "PO" + String(n).padStart(8, "0");
+      const { rows } = await query("SELECT 1 FROM products WHERE public_id=$1 LIMIT 1", [pid]);
+      if (rows.length === 0) return pid;
+    }
+    throw new Error("public_id generatsiya qilishda xatolik");
+  },
+
   async find(filter = {}) {
     const conditions = [];
     const values = [];
@@ -73,12 +84,14 @@ const Product = {
   },
 
   async create(data) {
+    const public_id = await this._generatePublicId();
     const { rows } = await query(
       `INSERT INTO products
-         (name, category, price, unit, qty, condition, viloyat, tuman, photo, photos, owner_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+         (public_id, name, category, price, unit, qty, condition, viloyat, tuman, photo, photos, owner_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
        RETURNING *`,
       [
+        public_id,
         data.name,
         data.category || "boshqa",
         data.price,
