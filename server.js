@@ -8,7 +8,8 @@ async function start() {
 
   const { getBot } = require('./bot');
   const botTokenSet = !!process.env.TELEGRAM_BOT_TOKEN;
-  const pollingEnabled = process.env.BOT_POLLING_ENABLED === "true";
+  // Default: polling yoqilgan. Faqat BOT_POLLING_ENABLED=false bo'lsa o'chadi.
+  const pollingEnabled = process.env.BOT_POLLING_ENABLED !== "false";
   if (botTokenSet && pollingEnabled) {
     getBot(true);
   } else if (botTokenSet && !pollingEnabled) {
