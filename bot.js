@@ -82,6 +82,11 @@ function getBot(startPolling = false) {
         }
 
         const isNew = !user;
+        // Kontakt yuborilgach reply keyboard pastda qolib ketmasligi uchun olib tashlaymiz.
+        await ctx.reply("✅ Raqam qabul qilindi", {
+          reply_markup: { remove_keyboard: true },
+        });
+
         await ctx.reply(
           isNew
             ? `Salom, ${firstName}! 👋\n\nSiz yangi foydalanuvchisiz.\nQuyidagi tugmani bosing:`
