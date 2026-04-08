@@ -2,6 +2,7 @@ const express = require("express");
 const Payment = require("../models/Payment");
 const Offer   = require("../models/Offer");
 const authMiddleware = require("../middleware/auth");
+const { notifyUser } = require("../bot");
 
 const router = express.Router();
 
