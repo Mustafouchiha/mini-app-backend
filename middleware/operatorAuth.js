@@ -7,6 +7,17 @@ const JWT_SECRET = process.env.JWT_SECRET || "remarket_secret_key_2024";
 const OPERATOR_PHONES    = ["331350206"];
 const OPERATOR_TELEGRAMS = ["@Requrilish_admin", "@requrilish_admin"];
 
+function phoneCore(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (!digits) return "";
+  return digits.slice(-9);
+}
+
+function isOperatorPhone(userPhone) {
+  const core = phoneCore(userPhone);
+  return OPERATOR_PHONES.includes(core);
+}
+
 module.exports = async function operatorAuth(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) {
@@ -20,7 +31,7 @@ module.exports = async function operatorAuth(req, res, next) {
     if (!user) return res.status(401).json({ message: "Foydalanuvchi topilmadi" });
 
     const isOperator =
-      OPERATOR_PHONES.includes(user.phone) ||
+      isOperatorPhone(user.phone) ||
       OPERATOR_TELEGRAMS.map(t => t.toLowerCase()).includes((user.telegram || "").toLowerCase());
 
     if (!isOperator) {

@@ -10,6 +10,10 @@ const router = express.Router();
 // POST /api/offers — taklif yuborish
 router.post("/", authMiddleware, async (req, res) => {
   try {
+    if (req.user.is_blocked) {
+      return res.status(403).json({ message: "Siz bloklangansiz. Taklif yubora olmaysiz" });
+    }
+
     const { productId, message } = req.body;
 
     if (!productId) {

@@ -2,8 +2,19 @@ const express = require("express");
 const { query } = require("../db");
 const { connect } = require("../db");
 const operatorAuth = require("../middleware/operatorAuth");
+const User = require("../models/User");
 
 const router = express.Router();
+
+async function findUserByPhoneOrPublicId(phone) {
+  const raw = String(phone).trim();
+  const normalizedPhone = raw.replace(/\D/g, "").slice(-9);
+  const { rows } = await query(
+    `SELECT * FROM users WHERE phone = $1 OR public_id = $2 LIMIT 1`,
+    [normalizedPhone, raw.toUpperCase()]
+  );
+  return rows[0] || null;
+}
 
 // Barcha route larda operator tekshiruvi
 router.use(operatorAuth);
@@ -47,30 +58,22 @@ router.post("/deposit", async (req, res) => {
     const sum = Number(amount);
     if (isNaN(sum) || sum <= 0) return res.status(400).json({ message: "Summa noto'g'ri" });
 
-    const raw = String(phone).trim();
-    const normalizedPhone = raw.replace(/\D/g, "").slice(-9);
-
-    const { rows: found } = await query(
-      `SELECT * FROM users
-       WHERE phone = $1 OR public_id = $2
-       LIMIT 1`,
-      [normalizedPhone, raw.toUpperCase()]
-    );
-    if (!found[0]) return res.status(404).json({ message: "Bu raqamli foydalanuvchi topilmadi" });
+    const foundUser = await findUserByPhoneOrPublicId(phone);
+    if (!foundUser) return res.status(404).json({ message: "Bu raqamli foydalanuvchi topilmadi" });
 
     const { rows } = await query(
       "UPDATE users SET balance = balance + $1, updated_at = NOW() WHERE id = $2 RETURNING id, name, phone, balance",
-      [sum, found[0].id]
+      [sum, foundUser.id]
     );
 
     // Foydalanuvchiga Telegram xabari
     let botNotified = false;
     let botNote = "";
-    if (found[0].tg_chat_id) {
+    if (foundUser.tg_chat_id) {
       try {
         const { notifyUser } = require("../bot");
         await notifyUser(
-          found[0].tg_chat_id,
+          foundUser.tg_chat_id,
           `💰 *Hisobingiz to'ldirildi!*\n\n` +
           `➕ Qo'shilgan summa: *${sum.toLocaleString()} so'm*\n` +
           `💼 Joriy balans: *${Number(rows[0].balance).toLocaleString()} so'm*\n\n` +
@@ -96,6 +99,65 @@ router.post("/deposit", async (req, res) => {
   }
 });
 
+// ── Foydalanuvchidan balansdan yechish (operator) ─────────────────
+// POST /api/operator/withdraw  { phone, amount }
+router.post("/withdraw", async (req, res) => {
+  try {
+    const { phone, amount } = req.body;
+    if (!phone || amount === undefined || amount === null) {
+      return res.status(400).json({ message: "phone va amount majburiy" });
+    }
+
+    const sum = Number(amount);
+    if (isNaN(sum) || sum <= 0) return res.status(400).json({ message: "Summa noto'g'ri" });
+
+    const foundUser = await findUserByPhoneOrPublicId(phone);
+    if (!foundUser) return res.status(404).json({ message: "Bu raqamli foydalanuvchi topilmadi" });
+
+    let updatedUser;
+    try {
+      updatedUser = await User.deduct(foundUser.id, sum);
+    } catch (e) {
+      return res.status(400).json({ message: e.message || "Balansdan yechib bo'lmadi" });
+    }
+
+    let botNotified = false;
+    let botNote = "";
+    if (foundUser.tg_chat_id) {
+      try {
+        const { notifyUser } = require("../bot");
+        await notifyUser(
+          foundUser.tg_chat_id,
+          `💸 *Hisobingizdan yechildi*\n\n` +
+          `➖ Yechilgan: *${sum.toLocaleString()} so'm*\n` +
+          `💼 Joriy balans: *${Number(updatedUser.balance).toLocaleString()} so'm*\n\n` +
+          `ℹ️ Operator: *Mustafo Ismoiljonov*`,
+          { parse_mode: "Markdown" }
+        );
+        botNotified = true;
+      } catch (e) {
+        botNote = `Bot xabar yuborilmadi: ${e.message}`;
+      }
+    } else {
+      botNote = "Foydalanuvchida tg_chat_id yo'q (botga ulanmagan)";
+    }
+
+    res.json({
+      message: `${sum.toLocaleString()} so'm balansdan yechildi`,
+      user: {
+        id: updatedUser.id,
+        name: updatedUser.name,
+        phone: updatedUser.phone,
+        balance: updatedUser.balance,
+      },
+      botNotified,
+      botNote,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // ── Foydalanuvchini o'chirish ─────────────────────────────────────
 // DELETE /api/operator/users/:id
 router.delete("/users/:id", async (req, res) => {
@@ -110,32 +172,28 @@ router.delete("/users/:id", async (req, res) => {
 
     await client.query("BEGIN");
 
-    // User mahsulotlarini yopamiz (postlar ham yopilsin)
-    const { rows: userProducts } = await client.query(
-      "SELECT id FROM products WHERE owner_id = $1",
+    // FK tartibi: payments -> offers -> products -> users
+    // (products.owner_id users ga bog'langan — faqat yopib qolinsa user o'chmaydi)
+    await client.query(
+      `DELETE FROM payments
+       WHERE offer_id IN (
+         SELECT o.id FROM offers o
+         WHERE o.buyer_id = $1
+            OR o.seller_id = $1
+            OR o.product_id IN (SELECT p.id FROM products p WHERE p.owner_id = $1)
+       )`,
       [id]
     );
-    const productIds = userProducts.map((p) => p.id);
 
     await client.query(
-      "UPDATE products SET is_active = false, updated_at = NOW() WHERE owner_id = $1",
+      `DELETE FROM offers
+       WHERE buyer_id = $1
+          OR seller_id = $1
+          OR product_id IN (SELECT id FROM products WHERE owner_id = $1)`,
       [id]
     );
 
-    // Offer/payment bog'lanishlarini tozalash
-    if (productIds.length > 0) {
-      await client.query(
-        "DELETE FROM payments WHERE buyer_id = $1 OR seller_id = $1 OR product_id = ANY($2::uuid[])",
-        [id, productIds]
-      );
-      await client.query(
-        "DELETE FROM offers WHERE buyer_id = $1 OR seller_id = $1 OR product_id = ANY($2::uuid[])",
-        [id, productIds]
-      );
-    } else {
-      await client.query("DELETE FROM payments WHERE buyer_id = $1 OR seller_id = $1", [id]);
-      await client.query("DELETE FROM offers WHERE buyer_id = $1 OR seller_id = $1", [id]);
-    }
+    await client.query("DELETE FROM products WHERE owner_id = $1", [id]);
 
     const del = await client.query("DELETE FROM users WHERE id = $1 RETURNING id", [id]);
     if (!del.rows[0]) {
@@ -144,7 +202,7 @@ router.delete("/users/:id", async (req, res) => {
     }
 
     await client.query("COMMIT");
-    res.json({ message: "Foydalanuvchi va unga tegishli postlar o'chirildi" });
+    res.json({ message: "Foydalanuvchi, e'lonlari va bog'liq taklif/to'lovlar o'chirildi" });
   } catch (err) {
     try { await client.query("ROLLBACK"); } catch {}
     res.status(500).json({ message: err.message });
