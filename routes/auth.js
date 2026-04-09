@@ -65,16 +65,18 @@ router.post("/register", async (req, res) => {
     if (!name || !phone) {
       return res.status(400).json({ message: "Ism va telefon majburiy" });
     }
+
+    const exists = await User.findOne({ phone });
     const tg = normalizeTelegram(telegram);
-    if (!tg) {
+    if (!exists && !tg) {
       return res.status(400).json({ message: "Telegram username majburiy" });
     }
 
-    const exists = await User.findOne({ phone });
+    const isNewUser = !exists;
     let user = exists || (await User.create({ name, phone, telegram: tg }));
 
     // Agar foydalanuvchi mavjud bo'lsa, telegram bo'sh bo'lsa yangilaymiz
-    if (user && (!user.telegram || !String(user.telegram).trim())) {
+    if (tg && user && (!user.telegram || !String(user.telegram).trim())) {
       user = await User.findByIdAndUpdate(user.id, { telegram: tg }) || user;
     }
 
@@ -82,8 +84,8 @@ router.post("/register", async (req, res) => {
       user = await User.findByIdAndUpdate(user.id, { tg_chat_id: tgChatId }) || user;
     }
 
-    // Telegram xabar — ro'yxatdan o'tish tasdiqi
-    if (user.tg_chat_id) {
+    // Telegram xabar — faqat yangi ro'yxatdan o'tganda yuboramiz
+    if (isNewUser && user.tg_chat_id) {
       const { notifyUser } = require('../bot');
       await notifyUser(user.tg_chat_id,
         `✅ *ReMarket'ga xush kelibsiz, ${user.name}!*\n\nRo'yxatdan o'tdingiz.\nTelefon: +998 ${user.phone}`,
