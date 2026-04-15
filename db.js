@@ -1,20 +1,16 @@
 const { Pool } = require("pg");
 
 let pool;
-let _tablesReady = null; // Lazy init promise — bir marta ishga tushadi
+let _tablesReady = null;
 
 function getPool() {
   if (!pool) {
     const url = process.env.DATABASE_URL;
     if (!url) throw new Error("DATABASE_URL .env da topilmadi");
-
     pool = new Pool({
       connectionString: url,
-      ssl:
-        process.env.NODE_ENV === "production"
-          ? { rejectUnauthorized: false }
-          : false,
-      max: 5, // serverless uchun kam connection
+      ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+      max: 5,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
     });
@@ -22,95 +18,64 @@ function getPool() {
   return pool;
 }
 
-// Jadvallar faqat bir marta yaratiladi (lazy)
 function ensureTables() {
   if (!_tablesReady) {
     _tablesReady = initTables(getPool()).catch((err) => {
-      _tablesReady = null; // xato bo'lsa keyingi so'rovda qayta urinilsin
+      _tablesReady = null;
       throw err;
     });
   }
   return _tablesReady;
 }
 
-// server.js startup uchun
 async function connect() {
   await ensureTables();
   return getPool();
 }
 
-// Barcha model so'rovlari shu orqali o'tadi (jadvallar avtomatik tayyor bo'ladi)
 async function query(text, params) {
   await ensureTables();
   return getPool().query(text, params);
 }
 
-// ── SQL jadvallarni yaratish (agar mavjud bo'lmasa) ───────────────
 async function initTables(p) {
   await p.query(`
     CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
     CREATE TABLE IF NOT EXISTS users (
       id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-      public_id  VARCHAR(10),
+      public_id   VARCHAR(10),
       name        VARCHAR(255) NOT NULL,
       phone       VARCHAR(50)  NOT NULL UNIQUE,
       telegram    VARCHAR(255) DEFAULT '',
       avatar      TEXT,
       is_blocked  BOOLEAN      NOT NULL DEFAULT FALSE,
+      is_operator BOOLEAN      NOT NULL DEFAULT FALSE,
       balance     NUMERIC      NOT NULL DEFAULT 0,
       joined      TIMESTAMPTZ  DEFAULT NOW(),
       created_at  TIMESTAMPTZ  DEFAULT NOW(),
       updated_at  TIMESTAMPTZ  DEFAULT NOW()
     );
 
-    -- Mavjud jadvalga balance ustunini qo'shish (agar yo'q bo'lsa)
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'users' AND column_name = 'balance'
-      ) THEN
-        ALTER TABLE users ADD COLUMN balance NUMERIC NOT NULL DEFAULT 0;
-      END IF;
-    END $$;
-
-    -- Mavjud jadvalga is_blocked ustunini qo'shish (agar yo'q bo'lsa)
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'users' AND column_name = 'is_blocked'
-      ) THEN
-        ALTER TABLE users ADD COLUMN is_blocked BOOLEAN NOT NULL DEFAULT FALSE;
-      END IF;
-    END $$;
-
-    -- Mavjud jadvalga public_id ustunini qo'shish (agar yo'q bo'lsa)
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'users' AND column_name = 'public_id'
-      ) THEN
-        ALTER TABLE users ADD COLUMN public_id VARCHAR(10);
-      END IF;
-    END $$;
-
-    -- Mavjud jadvalga tg_chat_id ustunini qo'shish (agar yo'q bo'lsa)
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'users' AND column_name = 'tg_chat_id'
-      ) THEN
-        ALTER TABLE users ADD COLUMN tg_chat_id BIGINT;
-      END IF;
-    END $$;
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='balance') THEN
+        ALTER TABLE users ADD COLUMN balance NUMERIC NOT NULL DEFAULT 0; END IF; END $$;
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='is_blocked') THEN
+        ALTER TABLE users ADD COLUMN is_blocked BOOLEAN NOT NULL DEFAULT FALSE; END IF; END $$;
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='is_operator') THEN
+        ALTER TABLE users ADD COLUMN is_operator BOOLEAN NOT NULL DEFAULT FALSE; END IF; END $$;
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='public_id') THEN
+        ALTER TABLE users ADD COLUMN public_id VARCHAR(10); END IF; END $$;
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='tg_chat_id') THEN
+        ALTER TABLE users ADD COLUMN tg_chat_id BIGINT; END IF; END $$;
 
     CREATE TABLE IF NOT EXISTS products (
       id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-      public_id  VARCHAR(10),
+      public_id   VARCHAR(10),
       name        VARCHAR(255) NOT NULL,
       category    VARCHAR(50)  NOT NULL DEFAULT 'boshqa',
       price       NUMERIC      NOT NULL,
@@ -119,36 +84,38 @@ async function initTables(p) {
       condition   VARCHAR(50)  DEFAULT 'Yaxshi',
       viloyat     VARCHAR(255) NOT NULL,
       tuman       VARCHAR(255) DEFAULT '',
+      mahalla     VARCHAR(255) DEFAULT '',
       photo       TEXT,
+      photos      TEXT,
       owner_id    UUID         NOT NULL REFERENCES users(id),
       is_active   BOOLEAN      DEFAULT TRUE,
+      status      VARCHAR(20)  NOT NULL DEFAULT 'pending',
+      reject_reason TEXT       DEFAULT NULL,
       created_at  TIMESTAMPTZ  DEFAULT NOW(),
       updated_at  TIMESTAMPTZ  DEFAULT NOW()
     );
 
-    -- products uchun public_id ustunini qo'shish (agar kerak bo'lsa)
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='public_id') THEN
+        ALTER TABLE products ADD COLUMN public_id VARCHAR(10); END IF; END $$;
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='photos') THEN
+        ALTER TABLE products ADD COLUMN photos TEXT; END IF; END $$;
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='mahalla') THEN
+        ALTER TABLE products ADD COLUMN mahalla VARCHAR(255) DEFAULT ''; END IF; END $$;
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='status') THEN
+        ALTER TABLE products ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'approved'; END IF; END $$;
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='reject_reason') THEN
+        ALTER TABLE products ADD COLUMN reject_reason TEXT DEFAULT NULL; END IF; END $$;
+
+    CREATE UNIQUE INDEX IF NOT EXISTS users_public_id_unique ON users(public_id) WHERE public_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS products_public_id_unique ON products(public_id) WHERE public_id IS NOT NULL;
+
     DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'products' AND column_name = 'public_id'
-      ) THEN
-        ALTER TABLE products ADD COLUMN public_id VARCHAR(10);
-      END IF;
-    END $$;
-
-    CREATE UNIQUE INDEX IF NOT EXISTS users_public_id_unique
-      ON users(public_id)
-      WHERE public_id IS NOT NULL;
-
-    CREATE UNIQUE INDEX IF NOT EXISTS products_public_id_unique
-      ON products(public_id)
-      WHERE public_id IS NOT NULL;
-
-    -- Eski yozuvlar uchun public_id'ni backfill qilish
-    DO $$
-    DECLARE r RECORD;
-      sid TEXT;
+    DECLARE r RECORD; sid TEXT;
     BEGIN
       FOR r IN SELECT id FROM users WHERE public_id IS NULL LOOP
         LOOP
@@ -160,8 +127,7 @@ async function initTables(p) {
     END $$;
 
     DO $$
-    DECLARE r RECORD;
-      sid TEXT;
+    DECLARE r RECORD; sid TEXT;
     BEGIN
       FOR r IN SELECT id FROM products WHERE public_id IS NULL LOOP
         LOOP
@@ -199,18 +165,8 @@ async function initTables(p) {
       updated_at   TIMESTAMPTZ DEFAULT NOW()
     );
 
-    -- Mavjud jadvalga photos ustunini qo'shish (agar yo'q bo'lsa)
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'products' AND column_name = 'photos'
-      ) THEN
-        ALTER TABLE products ADD COLUMN photos TEXT;
-      END IF;
-    END $$;
-
     CREATE INDEX IF NOT EXISTS idx_products_active_created ON products (is_active, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_products_status ON products (status);
     CREATE INDEX IF NOT EXISTS idx_products_owner ON products (owner_id);
     CREATE INDEX IF NOT EXISTS idx_products_category ON products (category);
     CREATE INDEX IF NOT EXISTS idx_offers_buyer ON offers (buyer_id);
