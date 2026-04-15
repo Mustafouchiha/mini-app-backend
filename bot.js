@@ -1,0 +1,140 @@
+const { Telegraf } = require('telegraf');
+const User = require('./models/User');
+const { createToken } = require('./tgTokens');
+
+const MINI_APP_URL = process.env.MINI_APP_URL || 'https://frontend-353d.vercel.app/';
+
+let bot = null;
+let pollingStarted = false;
+
+function getBot(startPolling = false) {
+  if (!bot && process.env.TELEGRAM_BOT_TOKEN) {
+    bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
+
+    bot.command('start', async (ctx) => {
+      const tgChatId = ctx.from.id;
+      const firstName = ctx.from.first_name || '';
+
+      try {
+        // Allaqachon ro'yxatdan o'tgan bo'lsa — to'g'ridan login link yuborish
+        const existingUser = await User.findByTgChatId(tgChatId);
+        if (existingUser) {
+          const token = createToken(existingUser.id);
+          const appUrl = `${MINI_APP_URL}?tgToken=${token}`;
+          return ctx.reply(
+            `Salom, ${firstName}! ✅ Xush kelibsiz!\n\nQuyidagi tugmani bosib kiring:`,
+            {
+              reply_markup: {
+                inline_keyboard: [[
+                  { text: '🚀 Mini Appga kirish', web_app: { url: appUrl } },
+                ]],
+              },
+            }
+          );
+        }
+      } catch { /* DB xatosida oddiy xush kelibsizga o'tadi */ }
+
+      // Yangi foydalanuvchi — telefon so'rash
+      ctx.reply(
+        `Salom! 👋 ReMarket'ga xush kelibsiz!\n\nKirish uchun telefon raqamingizni yuboring:`,
+        {
+          reply_markup: {
+            keyboard: [[
+              { text: '📱 Telefon raqamni yuborish', request_contact: true },
+            ]],
+            resize_keyboard: true,
+            one_time_keyboard: true,
+          },
+        }
+      );
+    });
+
+    bot.on('contact', async (ctx) => {
+      const firstName = ctx.from.first_name || '';
+      const tgChatId = ctx.from.id;
+      // Raqamdan + va bo'shliqlarni olib tashlash
+      const rawPhone = ctx.message.contact.phone_number.replace(/\D/g, '');
+      // 998XXXXXXXXX → XXXXXXXXX (9 ta raqam)
+      const phone = rawPhone.startsWith('998') ? rawPhone.slice(3) : rawPhone;
+
+      try {
+        let user = await User.findOne({ phone });
+
+        let appUrl;
+        if (user) {
+          // Mavjud foydalanuvchi — 1 martalik token bilan avtomatik kirish
+          if (String(user.tg_chat_id) !== String(tgChatId)) {
+            user = await User.findByIdAndUpdate(user.id, { tg_chat_id: tgChatId }) || user;
+          }
+          const token = createToken(user.id);
+          appUrl = `${MINI_APP_URL}?tgToken=${token}`;
+        } else {
+          // Yangi foydalanuvchi — Mini App ichida ro'yxatdan o'tish
+          const tgUsername = ctx.from.username ? `@${ctx.from.username}` : '';
+          const params = new URLSearchParams({
+            phone,
+            tgChatId: String(tgChatId),
+            name: firstName,
+            telegram: tgUsername,
+            register: '1',
+          });
+          appUrl = `${MINI_APP_URL}?${params.toString()}`;
+        }
+
+        const isNew = !user;
+        // Kontakt yuborilgach reply keyboard pastda qolib ketmasligi uchun olib tashlaymiz.
+        await ctx.reply("✅ Raqam qabul qilindi", {
+          reply_markup: { remove_keyboard: true },
+        });
+
+        await ctx.reply(
+          isNew
+            ? `Salom, ${firstName}! 👋\n\nSiz yangi foydalanuvchisiz.\nQuyidagi tugmani bosing:`
+            : `Salom, ${firstName}! ✅\n\nQuyidagi tugmani bosib kiring:`,
+          {
+            reply_markup: {
+              inline_keyboard: [[
+                {
+                  text: '🚀 Mini Appga kirish',
+                  web_app: { url: appUrl },
+                },
+              ]],
+            },
+          }
+        );
+      } catch (e) {
+        console.error('Bot contact handler xatosi:', e.message);
+        ctx.reply('Xatolik yuz berdi. Qaytadan urinib ko\'ring yoki /start bosing.');
+      }
+    });
+
+  }
+
+  if (bot && startPolling && !pollingStarted) {
+    pollingStarted = true;
+    bot.launch({ dropPendingUpdates: true })
+      .then(() => console.log('🤖 Telegram bot polling ishga tushdi'))
+      .catch(err => {
+        const msg = String(err?.message || "");
+        if (msg.includes("409")) {
+          console.warn("⚠️ Bot 409: boshqa instance polling qilmoqda, bu instance polling'siz davom etadi");
+          return;
+        }
+        console.error('❌ Bot launch xatosi:', msg);
+      });
+  }
+  return bot;
+}
+
+// Foydalanuvchiga Telegram orqali xabar yuborish
+async function notifyUser(tgChatId, text, extra = {}) {
+  const b = getBot(false);
+  if (!b || !tgChatId) return;
+  try {
+    await b.telegram.sendMessage(tgChatId, text, extra);
+  } catch (e) {
+    console.error('Bot xabar yuborishda xato:', e.message);
+  }
+}
+
+module.exports = { getBot, notifyUser };
