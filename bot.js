@@ -1,13 +1,17 @@
 const { Telegraf } = require('telegraf');
 const User = require('./models/User');
 const { createToken } = require('./tgTokens');
+<<<<<<< HEAD
 const { query } = require('./db');
+=======
+>>>>>>> 83642868c3da3a35e2a0e0a4cf296ed3de904c8a
 
 const MINI_APP_URL = process.env.MINI_APP_URL || 'https://frontend-353d.vercel.app/';
 
 let bot = null;
 let pollingStarted = false;
 
+<<<<<<< HEAD
 // Operator phones/telegrams
 const OPERATOR_PHONES    = ["331350206"];
 const OPERATOR_TELEGRAMS = ["@Requrilish_admin", "@requrilish_admin"];
@@ -30,16 +34,25 @@ function isOperatorUser(user) {
 // Pending reply state for operators (waiting for reject reason)
 const pendingRejectReason = new Map(); // chatId -> productId
 
+=======
+>>>>>>> 83642868c3da3a35e2a0e0a4cf296ed3de904c8a
 function getBot(startPolling = false) {
   if (!bot && process.env.TELEGRAM_BOT_TOKEN) {
     bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
 
+<<<<<<< HEAD
     // /start command
+=======
+>>>>>>> 83642868c3da3a35e2a0e0a4cf296ed3de904c8a
     bot.command('start', async (ctx) => {
       const tgChatId = ctx.from.id;
       const firstName = ctx.from.first_name || '';
 
       try {
+<<<<<<< HEAD
+=======
+        // Allaqachon ro'yxatdan o'tgan bo'lsa — to'g'ridan login link yuborish
+>>>>>>> 83642868c3da3a35e2a0e0a4cf296ed3de904c8a
         const existingUser = await User.findByTgChatId(tgChatId);
         if (existingUser) {
           const token = createToken(existingUser.id);
@@ -57,6 +70,10 @@ function getBot(startPolling = false) {
         }
       } catch { /* DB xatosida oddiy xush kelibsizga o'tadi */ }
 
+<<<<<<< HEAD
+=======
+      // Yangi foydalanuvchi — telefon so'rash
+>>>>>>> 83642868c3da3a35e2a0e0a4cf296ed3de904c8a
       ctx.reply(
         `Salom! 👋 ReMarket'ga xush kelibsiz!\n\nKirish uchun telefon raqamingizni yuboring:`,
         {
@@ -71,6 +88,7 @@ function getBot(startPolling = false) {
       );
     });
 
+<<<<<<< HEAD
     // Contact handler — ALWAYS update tg_chat_id + send login link
     bot.on('contact', async (ctx) => {
       const firstName = ctx.from.first_name || '';
@@ -95,6 +113,30 @@ function getBot(startPolling = false) {
         } else {
           // New user — register with tg_chat_id
           isNew = true;
+=======
+    bot.on('contact', async (ctx) => {
+      const firstName = ctx.from.first_name || '';
+      const tgChatId = ctx.from.id;
+      // Raqamdan + va bo'shliqlarni olib tashlash
+      const rawPhone = ctx.message.contact.phone_number.replace(/\D/g, '');
+      // 998XXXXXXXXX → XXXXXXXXX (9 ta raqam)
+      const phone = rawPhone.startsWith('998') ? rawPhone.slice(3) : rawPhone;
+
+      try {
+        let user = await User.findOne({ phone });
+
+        let appUrl;
+        if (user) {
+          // Mavjud foydalanuvchi — 1 martalik token bilan avtomatik kirish
+          if (String(user.tg_chat_id) !== String(tgChatId)) {
+            user = await User.findByIdAndUpdate(user.id, { tg_chat_id: tgChatId }) || user;
+          }
+          const token = createToken(user.id);
+          appUrl = `${MINI_APP_URL}?tgToken=${token}`;
+        } else {
+          // Yangi foydalanuvchi — Mini App ichida ro'yxatdan o'tish
+          const tgUsername = ctx.from.username ? `@${ctx.from.username}` : '';
+>>>>>>> 83642868c3da3a35e2a0e0a4cf296ed3de904c8a
           const params = new URLSearchParams({
             phone,
             tgChatId: String(tgChatId),
@@ -105,6 +147,11 @@ function getBot(startPolling = false) {
           appUrl = `${MINI_APP_URL}?${params.toString()}`;
         }
 
+<<<<<<< HEAD
+=======
+        const isNew = !user;
+        // Kontakt yuborilgach reply keyboard pastda qolib ketmasligi uchun olib tashlaymiz.
+>>>>>>> 83642868c3da3a35e2a0e0a4cf296ed3de904c8a
         await ctx.reply("✅ Raqam qabul qilindi", {
           reply_markup: { remove_keyboard: true },
         });
@@ -116,13 +163,21 @@ function getBot(startPolling = false) {
           {
             reply_markup: {
               inline_keyboard: [[
+<<<<<<< HEAD
                 { text: '🚀 Mini Appga kirish', web_app: { url: appUrl } },
+=======
+                {
+                  text: '🚀 Mini Appga kirish',
+                  web_app: { url: appUrl },
+                },
+>>>>>>> 83642868c3da3a35e2a0e0a4cf296ed3de904c8a
               ]],
             },
           }
         );
       } catch (e) {
         console.error('Bot contact handler xatosi:', e.message);
+<<<<<<< HEAD
         ctx.reply('Xatolik yuz berdi. Qayta urinib ko\'ring yoki /start bosing.');
       }
     });
@@ -223,6 +278,12 @@ function getBot(startPolling = false) {
         ctx.reply('Xatolik: ' + e.message);
       }
     });
+=======
+        ctx.reply('Xatolik yuz berdi. Qaytadan urinib ko\'ring yoki /start bosing.');
+      }
+    });
+
+>>>>>>> 83642868c3da3a35e2a0e0a4cf296ed3de904c8a
   }
 
   if (bot && startPolling && !pollingStarted) {
@@ -232,7 +293,11 @@ function getBot(startPolling = false) {
       .catch(err => {
         const msg = String(err?.message || "");
         if (msg.includes("409")) {
+<<<<<<< HEAD
           console.warn("⚠️ Bot 409: boshqa instance polling qilmoqda");
+=======
+          console.warn("⚠️ Bot 409: boshqa instance polling qilmoqda, bu instance polling'siz davom etadi");
+>>>>>>> 83642868c3da3a35e2a0e0a4cf296ed3de904c8a
           return;
         }
         console.error('❌ Bot launch xatosi:', msg);
@@ -241,6 +306,10 @@ function getBot(startPolling = false) {
   return bot;
 }
 
+<<<<<<< HEAD
+=======
+// Foydalanuvchiga Telegram orqali xabar yuborish
+>>>>>>> 83642868c3da3a35e2a0e0a4cf296ed3de904c8a
 async function notifyUser(tgChatId, text, extra = {}) {
   const b = getBot(false);
   if (!b || !tgChatId) return;
@@ -251,6 +320,7 @@ async function notifyUser(tgChatId, text, extra = {}) {
   }
 }
 
+<<<<<<< HEAD
 // Send product to all operators for approval
 async function notifyOperatorsNewProduct(product, ownerName) {
   const b = getBot(false);
@@ -304,3 +374,6 @@ async function notifyOperatorsNewProduct(product, ownerName) {
 }
 
 module.exports = { getBot, notifyUser, notifyOperatorsNewProduct };
+=======
+module.exports = { getBot, notifyUser };
+>>>>>>> 83642868c3da3a35e2a0e0a4cf296ed3de904c8a
