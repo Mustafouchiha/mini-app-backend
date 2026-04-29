@@ -36,11 +36,11 @@ router.get("/users", async (req, res) => {
     if (!q) {
       // So'nggi 50 ta foydalanuvchi
       ({ rows } = await query(
-        "SELECT id, public_id, name, phone, telegram, is_blocked, balance, tg_chat_id, joined FROM users ORDER BY joined DESC LIMIT 50"
+        "SELECT id, public_id, name, phone, telegram, is_blocked, is_operator, balance, tg_chat_id, joined FROM users ORDER BY joined DESC LIMIT 50"
       ));
     } else {
       ({ rows } = await query(
-        `SELECT id, public_id, name, phone, telegram, is_blocked, balance, tg_chat_id, joined FROM users
+        `SELECT id, public_id, name, phone, telegram, is_blocked, is_operator, balance, tg_chat_id, joined FROM users
          WHERE phone ILIKE $1 OR name ILIKE $1 OR id::text ILIKE $1 OR public_id ILIKE $1
          ORDER BY joined DESC LIMIT 30`,
         [`%${q}%`]
@@ -84,7 +84,7 @@ router.post("/deposit", async (req, res) => {
           `💰 *Hisobingiz to'ldirildi!*\n\n` +
           `➕ Qo'shilgan summa: *${sum.toLocaleString()} so'm*\n` +
           `💼 Joriy balans: *${Number(rows[0].balance).toLocaleString()} so'm*\n\n` +
-          `✅ Operator: *Mustafo Ismoiljonov*`,
+          `✅ Operator: *${req.user.name}*`,
           { parse_mode: "Markdown" }
         );
         botNotified = true;
@@ -138,7 +138,7 @@ router.post("/withdraw", async (req, res) => {
           `💸 *Hisobingizdan yechildi*\n\n` +
           `➖ Yechilgan: *${sum.toLocaleString()} so'm*\n` +
           `💼 Joriy balans: *${Number(updatedUser.balance).toLocaleString()} so'm*\n\n` +
-          `ℹ️ Operator: *Mustafo Ismoiljonov*`,
+          `ℹ️ Operator: *${req.user.name}*`,
           { parse_mode: "Markdown" }
         );
         botNotified = true;
