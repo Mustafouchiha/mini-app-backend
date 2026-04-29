@@ -7,6 +7,7 @@ const offerRoutes = require("./routes/offers");
 const paymentRoutes = require("./routes/payments");
 const walletRoutes = require("./routes/wallet");
 const operatorRoutes = require("./routes/operator");
+const requrilishRoutes = require("./modules/requrilish/routes/index");
 
 const app = express();
 
@@ -54,6 +55,7 @@ app.use("/api/offers", offerRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/wallet", walletRoutes);
 app.use("/api/operator", operatorRoutes);
+app.use("/api/requrilish", requrilishRoutes);
 
 // ── Health check ─────────────────────────────────────────────────
 app.get("/", (_req, res) => {
