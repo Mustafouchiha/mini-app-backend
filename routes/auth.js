@@ -47,12 +47,21 @@ router.post("/send-code", async (req, res) => {
     const { notifyUser } = require('../bot');
 
     const code = createOtp(phone);
-    console.log(`📨 OTP yuborilmoqda: phone=${phone}, tg_chat_id=${user.tg_chat_id}, code=${code}`);
-    await notifyUser(user.tg_chat_id,
-      `🔐 ReQurilish kirish kodi\n\nKodingiz: ${code}\n\n⏱ 5 daqiqa amal qiladi.\nBu kodni hech kimga bermang.`
-    );
-    console.log(`✅ OTP yuborildi: ${phone}`);
+    console.log(`📨 OTP: phone=${phone}, tg_chat_id=${user.tg_chat_id}, code=${code}`);
 
+    const sent = await notifyUser(
+      user.tg_chat_id,
+      `🔐 ReQurilish — Kirish kodi\n\nKodingiz: ${code}\n\n⏱ 5 daqiqa amal qiladi.\nBu kodni hech kimga bermang!`
+    );
+
+    if (!sent) {
+      console.error(`❌ OTP yuborilmadi: phone=${phone}, tg_chat_id=${user.tg_chat_id}`);
+      return res.status(500).json({
+        message: "Telegram'ga xabar yuborishda xatolik. @Requrilishbot ga /start yuboring va qayta urining."
+      });
+    }
+
+    console.log(`✅ OTP yuborildi: ${phone}`);
     res.json({ sent: true, message: "Telegram'ga 6 xonali kod yuborildi" });
   } catch (err) {
     res.status(500).json({ message: err.message });

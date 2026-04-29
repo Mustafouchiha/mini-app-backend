@@ -247,14 +247,15 @@ function getBot(startPolling = false) {
 }
 
 // Foydalanuvchiga Telegram orqali xabar yuborish (to'g'ridan-to'g'ri HTTP API)
+// Returns: true (muvaffaqiyatli) | false (xato)
 async function notifyUser(tgChatId, text, extra = {}) {
-  if (!tgChatId || !process.env.TELEGRAM_BOT_TOKEN) return;
+  if (!tgChatId || !process.env.TELEGRAM_BOT_TOKEN) return false;
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
   try {
     const https = require('https');
-    const body = JSON.stringify({ chat_id: tgChatId, text, ...extra });
-    await new Promise((resolve, reject) => {
+    const body = JSON.stringify({ chat_id: String(tgChatId), text, ...extra });
+    const result = await new Promise((resolve, reject) => {
       const req = https.request(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
@@ -262,19 +263,22 @@ async function notifyUser(tgChatId, text, extra = {}) {
         let data = '';
         res.on('data', (chunk) => data += chunk);
         res.on('end', () => {
-          const parsed = JSON.parse(data);
-          if (!parsed.ok) {
-            console.error('Telegram sendMessage xato:', parsed.description);
-          }
-          resolve(parsed);
+          try { resolve(JSON.parse(data)); }
+          catch { resolve({ ok: false, description: 'JSON parse xato' }); }
         });
       });
       req.on('error', reject);
       req.write(body);
       req.end();
     });
+    if (!result.ok) {
+      console.error(`Telegram sendMessage xato [${tgChatId}]:`, result.description);
+      return false;
+    }
+    return true;
   } catch (e) {
     console.error('notifyUser HTTP xato:', e.message);
+    return false;
   }
 }
 

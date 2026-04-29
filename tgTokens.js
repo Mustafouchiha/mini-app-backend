@@ -1,33 +1,21 @@
-// Vaqtinchalik Telegram login tokenlari (in-memory, 1 martalik, 5 daqiqa)
-const tokens = new Map();
+// Telegram login tokenlari — JWT asosida (server restart'dan keyin ham ishlaydi)
+const jwt = require('jsonwebtoken');
 
-const TTL = 30 * 24 * 60 * 60 * 1000; // 30 kun
+const SECRET = process.env.JWT_SECRET || 'remarket_secret_key_2024';
+const TTL_SEC = 60 * 60; // 1 soat
 
 function createToken(userId) {
-  // 8 belgili random token
-  const token = Math.random().toString(36).slice(2, 6).toUpperCase() +
-                Math.random().toString(36).slice(2, 6).toUpperCase();
-  tokens.set(token, { userId, expiresAt: Date.now() + TTL });
-  return token;
+  return jwt.sign({ userId, type: 'tg_login' }, SECRET, { expiresIn: TTL_SEC });
 }
 
 function verifyToken(token) {
-  const data = tokens.get(token);
-  if (!data) return null;
-  if (Date.now() > data.expiresAt) {
-    tokens.delete(token);
+  try {
+    const data = jwt.verify(token, SECRET);
+    if (data.type !== 'tg_login') return null;
+    return { userId: data.userId };
+  } catch {
     return null;
   }
-  tokens.delete(token); // 1 martalik
-  return data;
 }
-
-// Eskirgan tokenlarni tozalash (har 10 daqiqada)
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, val] of tokens.entries()) {
-    if (now > val.expiresAt) tokens.delete(key);
-  }
-}, 10 * 60 * 1000);
 
 module.exports = { createToken, verifyToken };
