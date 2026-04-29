@@ -246,14 +246,35 @@ function getBot(startPolling = false) {
   return bot;
 }
 
-// Foydalanuvchiga Telegram orqali xabar yuborish
+// Foydalanuvchiga Telegram orqali xabar yuborish (to'g'ridan-to'g'ri HTTP API)
 async function notifyUser(tgChatId, text, extra = {}) {
-  const b = getBot(false);
-  if (!b || !tgChatId) return;
+  if (!tgChatId || !process.env.TELEGRAM_BOT_TOKEN) return;
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const url = `https://api.telegram.org/bot${token}/sendMessage`;
   try {
-    await b.telegram.sendMessage(tgChatId, text, extra);
+    const https = require('https');
+    const body = JSON.stringify({ chat_id: tgChatId, text, ...extra });
+    await new Promise((resolve, reject) => {
+      const req = https.request(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+      }, (res) => {
+        let data = '';
+        res.on('data', (chunk) => data += chunk);
+        res.on('end', () => {
+          const parsed = JSON.parse(data);
+          if (!parsed.ok) {
+            console.error('Telegram sendMessage xato:', parsed.description);
+          }
+          resolve(parsed);
+        });
+      });
+      req.on('error', reject);
+      req.write(body);
+      req.end();
+    });
   } catch (e) {
-    console.error('Bot xabar yuborishda xato:', e.message);
+    console.error('notifyUser HTTP xato:', e.message);
   }
 }
 

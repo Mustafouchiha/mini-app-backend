@@ -47,10 +47,11 @@ router.post("/send-code", async (req, res) => {
     const { notifyUser } = require('../bot');
 
     const code = createOtp(phone);
+    console.log(`📨 OTP yuborilmoqda: phone=${phone}, tg_chat_id=${user.tg_chat_id}, code=${code}`);
     await notifyUser(user.tg_chat_id,
-      `🔐 *ReMarket kirish kodi*\n\nKodingiz: \`${code}\`\n\n⏱ 5 daqiqa amal qiladi.\nBu kodni hech kimga bermang.`,
-      { parse_mode: 'Markdown' }
+      `🔐 ReQurilish kirish kodi\n\nKodingiz: ${code}\n\n⏱ 5 daqiqa amal qiladi.\nBu kodni hech kimga bermang.`
     );
+    console.log(`✅ OTP yuborildi: ${phone}`);
 
     res.json({ sent: true, message: "Telegram'ga 6 xonali kod yuborildi" });
   } catch (err) {
