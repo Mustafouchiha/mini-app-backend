@@ -32,7 +32,8 @@ module.exports = async function operatorAuth(req, res, next) {
 
     const isOperator =
       isOperatorPhone(user.phone) ||
-      OPERATOR_TELEGRAMS.map(t => t.toLowerCase()).includes((user.telegram || "").toLowerCase());
+      OPERATOR_TELEGRAMS.map(t => t.toLowerCase()).includes((user.telegram || "").toLowerCase()) ||
+      user.is_operator === true;
 
     if (!isOperator) {
       return res.status(403).json({ message: "Ruxsat yo'q" });

@@ -108,6 +108,17 @@ async function initTables(p) {
       END IF;
     END $$;
 
+    -- is_operator ustunini qo'shish (agar yo'q bo'lsa)
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'users' AND column_name = 'is_operator'
+      ) THEN
+        ALTER TABLE users ADD COLUMN is_operator BOOLEAN NOT NULL DEFAULT FALSE;
+      END IF;
+    END $$;
+
     CREATE TABLE IF NOT EXISTS products (
       id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
       public_id  VARCHAR(10),

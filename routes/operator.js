@@ -6,6 +6,13 @@ const User = require("../models/User");
 
 const router = express.Router();
 
+// Bosh admin telefon raqami (faqat shu operator qo'sha oladi)
+const MAIN_ADMIN_PHONES = ["331350206"];
+function isMainAdmin(phone) {
+  const core = String(phone || "").replace(/\D/g, "").slice(-9);
+  return MAIN_ADMIN_PHONES.includes(core);
+}
+
 async function findUserByPhoneOrPublicId(phone) {
   const raw = String(phone).trim();
   const normalizedPhone = raw.replace(/\D/g, "").slice(-9);
@@ -304,6 +311,39 @@ router.put("/products/:id/toggle", async (req, res) => {
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
+});
+
+// ── Operator qo'shish/olib tashlash (faqat bosh admin) ───────────
+// PUT /api/operator/users/:id/set-operator { is_operator: true|false }
+router.put("/users/:id/set-operator", async (req, res) => {
+  try {
+    if (!isMainAdmin(req.user.phone)) {
+      return res.status(403).json({ message: "Faqat bosh admin operator qo'sha oladi" });
+    }
+    const isOp = Boolean(req.body.is_operator);
+    if (req.params.id === req.user.id && !isOp) {
+      return res.status(400).json({ message: "O'z operatorligingizni olib tashlay olmaysiz" });
+    }
+    const { rows } = await query(
+      `UPDATE users SET is_operator = $1, updated_at = NOW()
+       WHERE id = $2
+       RETURNING id, public_id, name, phone, is_operator`,
+      [isOp, req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ message: "Foydalanuvchi topilmadi" });
+    res.json({
+      message: isOp ? "Operator qo'shildi ✅" : "Operatorlikdan olib tashlandi",
+      user: rows[0],
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ── Joriy foydalanuvchi bosh admin ekanligini tekshirish ──────────
+// GET /api/operator/me/is-main-admin
+router.get("/me/is-main-admin", (req, res) => {
+  res.json({ isMainAdmin: isMainAdmin(req.user.phone) });
 });
 
 module.exports = router;

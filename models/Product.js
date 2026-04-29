@@ -17,9 +17,10 @@ const Product = {
     const values = [];
     let i = 1;
 
-    // Default: only approved & active
+    // Default: only approved & active, owner not blocked
     conditions.push(`p.is_active = TRUE`);
     conditions.push(`p.status = 'approved'`);
+    conditions.push(`u.is_blocked = FALSE`);
 
     if (filter.owner_ne) {
       conditions.push(`p.owner_id != $${i++}`);
